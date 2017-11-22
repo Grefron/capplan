@@ -11,12 +11,7 @@ class PlannerError(Exception):
 
 class PlanItemMixin:
     @property
-    def greenstart(self):
-        # latest safe start date for this task, slack in this task allowed
-        return self.end - self.duration - self.slack
-
-    @property
-    def redstart(self):
+    def start(self):
         # latest start date for this task, no slack in this task allows
         if self.end is None:
             return None
@@ -62,7 +57,7 @@ class Task(PlanItemMixin):
         self.end = end
         self.on_critical_path = False
         self.next_task = next_task
-        return self.redstart, self
+        return self.start, self
 
 
 class AbstractTaskList(collections.UserList, PlanItemMixin):
@@ -92,7 +87,7 @@ class AbstractTaskList(collections.UserList, PlanItemMixin):
         tasks = list(set(tasks))
         if sort:
             # sorted(student_tuples, key=lambda student: student[2])
-            return sorted(tasks, key=lambda t: t.redstart)
+            return sorted(tasks, key=lambda t: t.start)
         else:
             return tasks
 
@@ -136,7 +131,7 @@ class SerialTaskList(AbstractTaskList):
         for d in reversed(self.data):
             # all plan items must have an end date equal to start date of next task (backwards planning)
             end, next_task = d.plan(end, next_task=next_task)
-        return self.redstart, next_task
+        return self.start, next_task
 
     @property
     def duration(self):
@@ -158,7 +153,7 @@ class ParallelTaskList(AbstractTaskList):
         for d in reversed(self.data):
             # all plan items must have same end date as task list (executed in parallel)
             _, t = d.plan(end, next_task=next_task)
-        return self.redstart, t
+        return self.start, t
 
     @property
     def duration(self):
@@ -227,7 +222,7 @@ class Plotter:
                          "@" + str(tl.progress * 100) + "%", fontsize=9, zorder=10, ha='center')
             if tl.end is not None:
                 self.ax.text(x1 + padding, (y1 + y2) / 2,
-                             str(tl.redstart), color='r', fontsize=9, zorder=10, ha='left')
+                             str(tl.start), color='r', fontsize=9, zorder=10, ha='left')
                 self.ax.text(x2 - padding, (y1 + y2) / 2,
                              str(tl.end), color='b', fontsize=9, zorder=10, horizontalalignment='right')
                 self.ax.text((x2 + x1) / 2, (y2 + y1) / 2 + 2 * padding,
@@ -240,7 +235,7 @@ class Plotter:
             self.ax.text((x1 + x2) / 2, y1 + p / 5,
                          str(tl.duration), color='k', fontsize=9, zorder=10, ha='center')
             self.ax.text(x1 + padding, y1 + p / 5,
-                         str(tl.redstart), color='r', fontsize=9, zorder=10, ha='left')
+                         str(tl.start), color='r', fontsize=9, zorder=10, ha='left')
             self.ax.text(x2 - padding, y1 + p / 5,
                          str(tl.end), color='b', fontsize=9, zorder=10, horizontalalignment='right')
 
