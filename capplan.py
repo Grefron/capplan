@@ -5,6 +5,10 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 
 
+# TODO: Add TaskCollection.append / TaskCollection.prepend / TaskCollection.parallel
+
+
+
 class PlannerError(Exception):
     pass
 
@@ -60,7 +64,7 @@ class Task(PlanItemMixin):
         return self.start, self
 
 
-class AbstractTaskList(collections.UserList, PlanItemMixin):
+class AbstractTaskCollection(collections.UserList, PlanItemMixin):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.title = None
@@ -116,7 +120,7 @@ class AbstractTaskList(collections.UserList, PlanItemMixin):
         raise NotImplementedError()
 
 
-class SerialTaskList(AbstractTaskList):
+class SerialTaskCollection(AbstractTaskCollection):
     def __repr__(self):
         return "SerialTaskList <" + str(self) + ">"
 
@@ -138,7 +142,7 @@ class SerialTaskList(AbstractTaskList):
         return sum([d.duration for d in self.data])
 
 
-class ParallelTaskList(AbstractTaskList):
+class ParallelTaskCollection(AbstractTaskCollection):
     def __repr__(self):
         return "ParallelTaskList <" + str(self) + ">"
 
@@ -160,15 +164,15 @@ class ParallelTaskList(AbstractTaskList):
         return max([d.duration for d in self.data])
 
 
-def task_list(plan_items, title=None, deadline=None, tl_type='serial'):
-    tl = {'serial': SerialTaskList, 'parallel': ParallelTaskList}[tl_type](plan_items)
-    tl.deadline = deadline
-    tl.title = title
-    return tl
+def task_collection(plan_items, title=None, deadline=None, coll_type='serial'):
+    coll = {'serial': SerialTaskCollection, 'parallel': ParallelTaskCollection}[coll_type](plan_items)
+    coll.deadline = deadline
+    coll.title = title
+    return coll
 
 
-serial = functools.partial(task_list, tl_type='serial')
-parallel = functools.partial(task_list, tl_type='parallel')
+serial = functools.partial(task_collection, coll_type='serial')
+parallel = functools.partial(task_collection, coll_type='parallel')
 
 
 class Plotter:
@@ -182,14 +186,14 @@ class Plotter:
     def clear(self):
         self.ax.clear()
 
-    def plot(self, tl, x1=0, y1=0, x2=100, y2=100, task_list_progress=True, scaled=False):
+    def plot(self, coll, x1=0, y1=0, x2=100, y2=100, task_list_progress=True, scaled=False):
         # TODO: Fix scaled version (must have a  reference time)
-        if isinstance(tl, SerialTaskList):
-            tl_type = 'serial'
-        elif isinstance(tl, ParallelTaskList):
-            tl_type = 'parallel'
+        if isinstance(coll, SerialTaskCollection):
+            coll_type = 'serial'
+        elif isinstance(coll, ParallelTaskCollection):
+            coll_type = 'parallel'
         else:
-            tl_type = 'task'
+            coll_type = 'task'
 
         self.ax.add_patch(mpatches.Rectangle((x1, y1), (x2 - x1), (y2 - y1), fill=False, zorder=2))
 
@@ -199,67 +203,67 @@ class Plotter:
         else:
             p = 0
 
-        if tl_type == 'serial':
-            ddx = (x2 - x1) / len(tl)
+        if coll_type == 'serial':
+            ddx = (x2 - x1) / len(coll)
             dx1 = 0
-            for i, d in enumerate(tl):
+            for i, d in enumerate(coll):
                 if scaled:
-                    ddx += (x2 - x1) * d.duration / tl.duration
+                    ddx += (x2 - x1) * d.duration / coll.duration
                 self.plot(d, x1=x1 + dx1, y1=y1 + p, x2=x1 + dx1 + ddx, y2=y2)
                 dx1 += ddx
-        elif tl_type == 'parallel':
-            dy = (y2 - y1 - p) / len(tl)
-            for i, d in enumerate(tl):
+        elif coll_type == 'parallel':
+            dy = (y2 - y1 - p) / len(coll)
+            for i, d in enumerate(coll):
                 self.plot(d, x1=x1, y1=y1 + i * dy + p, x2=x2, y2=y1 + (i + 1) * dy + p)
         else:  # assume task
-            self.ax.add_patch(mpatches.Rectangle((x1, y1), (tl.progress * (x2 - x1)), (y2 - y1),
+            self.ax.add_patch(mpatches.Rectangle((x1, y1), (coll.progress * (x2 - x1)), (y2 - y1),
                                                  color='lightgrey', zorder=1))
             self.ax.text((x1 + x2) / 2, (y1 + y2) / 2,
-                         str(tl) + "(" + str(tl.duration) + ")", color='k', fontsize=10, zorder=10, ha='center')
+                         str(coll) + "(" + str(coll.duration) + ")", color='k', fontsize=10, zorder=10, ha='center')
             self.ax.text((x1 + x2) / 2, y1 + padding,
-                         ", ".join(tl.resources), color='k', fontsize=8, zorder=10, ha='center')
+                         ", ".join(coll.resources), color='k', fontsize=8, zorder=10, ha='center')
             self.ax.text((x1 + x2) / 2, y2 - 2 * padding,
-                         "@" + str(tl.progress * 100) + "%", fontsize=9, zorder=10, ha='center')
-            if tl.end is not None:
+                         "@" + str(coll.progress * 100) + "%", fontsize=9, zorder=10, ha='center')
+            if coll.end is not None:
                 self.ax.text(x1 + padding, (y1 + y2) / 2,
-                             str(tl.start), color='r', fontsize=9, zorder=10, ha='left')
+                             str(coll.start), color='r', fontsize=9, zorder=10, ha='left')
                 self.ax.text(x2 - padding, (y1 + y2) / 2,
-                             str(tl.end), color='b', fontsize=9, zorder=10, horizontalalignment='right')
+                             str(coll.end), color='b', fontsize=9, zorder=10, horizontalalignment='right')
                 self.ax.text((x2 + x1) / 2, (y2 + y1) / 2 + 2 * padding,
-                             str(tl.next_task), color='k', fontsize=9, zorder=10, ha='center')
+                             str(coll.next_task), color='k', fontsize=9, zorder=10, ha='center')
 
-        if task_list_progress and tl_type is not 'task':
+        if task_list_progress and coll_type is not 'task':
             y2 = y1 + p
-            self.ax.add_patch(mpatches.Rectangle((x1, y1), (tl.progress * (x2 - x1)), (y2 - y1),
+            self.ax.add_patch(mpatches.Rectangle((x1, y1), (coll.progress * (x2 - x1)), (y2 - y1),
                                                  color='grey', zorder=1))
             self.ax.text((x1 + x2) / 2, y1 + p / 5,
-                         str(tl.duration), color='k', fontsize=9, zorder=10, ha='center')
+                         str(coll.duration), color='k', fontsize=9, zorder=10, ha='center')
             self.ax.text(x1 + padding, y1 + p / 5,
-                         str(tl.start), color='r', fontsize=9, zorder=10, ha='left')
+                         str(coll.start), color='r', fontsize=9, zorder=10, ha='left')
             self.ax.text(x2 - padding, y1 + p / 5,
-                         str(tl.end), color='b', fontsize=9, zorder=10, horizontalalignment='right')
+                         str(coll.end), color='b', fontsize=9, zorder=10, horizontalalignment='right')
 
     def show(self):
         self.figure.show()
 
 
-tl1 = serial([Task(1, "T1", resources=["piet", "klaas"]), Task(1, "T2"), Task(2, "T3")])
+coll1 = serial([Task(1, "T1", resources=["piet", "klaas"]), Task(1, "T2"), Task(2, "T3")])
 
-tl2 = parallel([Task(1, "T4"), Task(2, "T5")])
+coll2 = parallel([Task(1, "T4"), Task(2, "T5")])
 
-tl3 = serial([tl2, Task(1, "T6")])
+coll3 = serial([coll2, Task(1, "T6")])
 
-tl4 = serial([Task(1, "T7"), Task(1, "T8"), Task(3, "T9")])
+coll4 = serial([Task(1, "T7"), Task(1, "T8"), Task(3, "T9")])
 
-tl5 = parallel([Task(2, "T10"), Task(3, "T11")])
+coll5 = parallel([Task(2, "T10"), Task(3, "T11")])
 
-tl6 = parallel([tl1, tl3, tl4, tl5])
+coll6 = parallel([coll1, coll3, coll4, coll5])
 
-tl7 = serial([Task(1, "T12"), Task(3, "T13")])
+coll7 = serial([Task(1, "T12"), Task(3, "T13")])
 
-tl8 = parallel([tl7, Task(2, "T14")])
+coll8 = parallel([coll7, Task(2, "T14")])
 
-project = serial([tl6, tl8, Task(1, "T15")], deadline=10)
+project = serial([coll6, coll8, Task(1, "T15")], deadline=10)
 
 project.task("T2").progress = 0.5
 project.plan()
@@ -267,3 +271,4 @@ project.plan()
 plotter = Plotter()
 plotter.plot(project)
 plt.show()
+
