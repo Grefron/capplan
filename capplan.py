@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 # TODO: Add TaskCollection.append / TaskCollection.prepend / TaskCollection.parallel
 
 
-
 class PlannerError(Exception):
     pass
 
@@ -175,17 +174,7 @@ serial = functools.partial(task_collection, coll_type='serial')
 parallel = functools.partial(task_collection, coll_type='parallel')
 
 
-class Plotter:
-    def __init__(self, width=10, height=8):
-        self.figure = plt.figure(figsize=(width, height))
-        self.ax = self.figure.add_subplot(111)
-        self.figure.tight_layout()
-
-        self.ax.axis(xmin=0, xmax=100, ymin=0, ymax=100)
-
-    def clear(self):
-        self.ax.clear()
-
+class PlotterBase:
     def plot(self, coll, x1=0, y1=0, x2=100, y2=100, task_list_progress=True, scaled=False):
         # TODO: Fix scaled version (must have a  reference time)
         if isinstance(coll, SerialTaskCollection):
@@ -195,7 +184,7 @@ class Plotter:
         else:
             coll_type = 'task'
 
-        self.ax.add_patch(mpatches.Rectangle((x1, y1), (x2 - x1), (y2 - y1), fill=False, zorder=2))
+        self.rect(x1=x1, y1=y1, x2=x2, y2=y2, fill=False, zorder=2)
 
         padding = 1
         if task_list_progress:
@@ -216,36 +205,68 @@ class Plotter:
             for i, d in enumerate(coll):
                 self.plot(d, x1=x1, y1=y1 + i * dy + p, x2=x2, y2=y1 + (i + 1) * dy + p)
         else:  # assume task
-            self.ax.add_patch(mpatches.Rectangle((x1, y1), (coll.progress * (x2 - x1)), (y2 - y1),
-                                                 color='lightgrey', zorder=1))
-            self.ax.text((x1 + x2) / 2, (y1 + y2) / 2,
-                         str(coll) + "(" + str(coll.duration) + ")", color='k', fontsize=10, zorder=10, ha='center')
-            self.ax.text((x1 + x2) / 2, y1 + padding,
-                         ", ".join(coll.resources), color='k', fontsize=8, zorder=10, ha='center')
-            self.ax.text((x1 + x2) / 2, y2 - 2 * padding,
-                         "@" + str(coll.progress * 100) + "%", fontsize=9, zorder=10, ha='center')
+            self.rect(x1=x1, y1=y1, x2=x1 + (coll.progress * (x2 - x1)), y2=y2,
+                      color='lightgrey', zorder=1, fill=True)
+            self.text(x=(x1 + x2) / 2, y=(y1 + y2) / 2,
+                      caption=str(coll) + "(" + str(coll.duration) + ")", color='k', fontsize=10, zorder=10,
+                      ha='center')
+            self.text(x=(x1 + x2) / 2, y=y1 + padding,
+                      caption=", ".join(coll.resources), color='k', fontsize=8, zorder=10, ha='center')
+            self.text(x=(x1 + x2) / 2, y=y2 - 2 * padding,
+                      caption="@" + str(coll.progress * 100) + "%", fontsize=9, zorder=10, ha='center')
             if coll.end is not None:
-                self.ax.text(x1 + padding, (y1 + y2) / 2,
-                             str(coll.start), color='r', fontsize=9, zorder=10, ha='left')
-                self.ax.text(x2 - padding, (y1 + y2) / 2,
-                             str(coll.end), color='b', fontsize=9, zorder=10, horizontalalignment='right')
-                self.ax.text((x2 + x1) / 2, (y2 + y1) / 2 + 2 * padding,
-                             str(coll.next_task), color='k', fontsize=9, zorder=10, ha='center')
+                self.text(x=x1 + padding, y=(y1 + y2) / 2,
+                          caption=str(coll.start), color='r', fontsize=9, zorder=10, ha='left')
+                self.text(x=x2 - padding, y=(y1 + y2) / 2,
+                          caption=str(coll.end), color='b', fontsize=9, zorder=10, horizontalalignment='right')
+                self.text(x=(x2 + x1) / 2, y=(y2 + y1) / 2 + 2 * padding,
+                          caption=str(coll.next_task), color='k', fontsize=9, zorder=10, ha='center')
 
         if task_list_progress and coll_type is not 'task':
             y2 = y1 + p
-            self.ax.add_patch(mpatches.Rectangle((x1, y1), (coll.progress * (x2 - x1)), (y2 - y1),
-                                                 color='grey', zorder=1))
-            self.ax.text((x1 + x2) / 2, y1 + p / 5,
-                         str(coll.duration), color='k', fontsize=9, zorder=10, ha='center')
-            self.ax.text(x1 + padding, y1 + p / 5,
-                         str(coll.start), color='r', fontsize=9, zorder=10, ha='left')
-            self.ax.text(x2 - padding, y1 + p / 5,
-                         str(coll.end), color='b', fontsize=9, zorder=10, horizontalalignment='right')
+            self.rect(x1=x1, y1=y1, x2=x1 + (coll.progress * (x2 - x1)), y2=y2,
+                      color='grey', zorder=1, fill=True)
+            self.text(x=(x1 + x2) / 2, y=y1 + p / 5,
+                      caption=str(coll.duration), color='k', fontsize=9, zorder=10, ha='center')
+            self.text(x=x1 + padding, y=y1 + p / 5,
+                      caption=str(coll.start), color='r', fontsize=9, zorder=10, ha='left')
+            # task collection end
+            self.text(x=x2 - padding, y=y1 + p / 5, caption=str(coll.end),
+                      color='b', fontsize=9, zorder=10, horizontalalignment='right')
+
+
+class MplPlotter(PlotterBase):
+    def __init__(self, width=10, height=8):
+        self.figure = plt.figure(figsize=(width, height))
+        self.ax = self.figure.add_subplot(111)
+        self.figure.tight_layout()
+
+        self.ax.axis(xmin=0, xmax=100, ymin=0, ymax=100)
+
+    def clear(self):
+        self.ax.clear()
+
+    def rect(self, **data):
+        x1, y1, x2, y2 = data['x1'], data['y1'], data['x2'], data['y2']
+        color = data.get('color', 'k')
+        fill = data.get('fill', False)
+        zorder = data.get('zorder', 11)
+        self.ax.add_patch(mpatches.Rectangle((x1, y1), (x2 - x1), (y2 - y1),
+                                             color=color, fill=fill, zorder=zorder))
+
+    def text(self, **data):
+        x, y = data['x'], data['y']
+        caption = data['caption']
+        color = data.get('color', 'b')
+        fontsize = data.get('fontsize', 10)
+        horizontalalignment = data.get('horizontalalignment', 'left')
+        horizontalalignment = data.get('ha', horizontalalignment)
+        zorder = data.get('zorder', 10)
+        self.ax.text(x, y, caption, color=color, fontsize=fontsize,
+                     zorder=zorder, horizontalalignment=horizontalalignment)
 
     def show(self):
         self.figure.show()
-
 
 coll1 = serial([Task(1, "T1", resources=["piet", "klaas"]), Task(1, "T2"), Task(2, "T3")])
 
@@ -268,7 +289,7 @@ project = serial([coll6, coll8, Task(1, "T15")], deadline=10)
 project.task("T2").progress = 0.5
 project.plan()
 
-plotter = Plotter()
+plotter = MplPlotter()
 plotter.plot(project)
 plt.show()
 
