@@ -173,9 +173,11 @@ def task_collection(plan_items, title=None, deadline=None, coll_type='serial'):
     return coll
 
 
+serial = functools.partial(task_collection, coll_type='serial')
+parallel = functools.partial(task_collection, coll_type='parallel')
+
+
 def main():
-    serial = functools.partial(task_collection, coll_type='serial')
-    parallel = functools.partial(task_collection, coll_type='parallel')
 
     coll1 = serial([Task(1, "T1", resources=["piet", "klaas"]), Task(1, "T2"), Task(2, "T3")])
 
