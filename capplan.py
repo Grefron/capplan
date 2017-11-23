@@ -173,30 +173,35 @@ def task_collection(plan_items, title=None, deadline=None, coll_type='serial'):
     return coll
 
 
-serial = functools.partial(task_collection, coll_type='serial')
-parallel = functools.partial(task_collection, coll_type='parallel')
+def main():
+    serial = functools.partial(task_collection, coll_type='serial')
+    parallel = functools.partial(task_collection, coll_type='parallel')
 
-coll1 = serial([Task(1, "T1", resources=["piet", "klaas"]), Task(1, "T2"), Task(2, "T3")])
+    coll1 = serial([Task(1, "T1", resources=["piet", "klaas"]), Task(1, "T2"), Task(2, "T3")])
 
-coll2 = parallel([Task(1, "T4"), Task(2, "T5")])
+    coll2 = parallel([Task(1, "T4"), Task(2, "T5")])
 
-coll3 = serial([coll2, Task(1, "T6")])
+    coll3 = serial([coll2, Task(1, "T6")])
 
-coll4 = serial([Task(1, "T7"), Task(1, "T8"), Task(3, "T9")])
+    coll4 = serial([Task(1, "T7"), Task(1, "T8"), Task(3, "T9")])
 
-coll5 = parallel([Task(2, "T10"), Task(3, "T11")])
+    coll5 = parallel([Task(2, "T10"), Task(3, "T11")])
 
-coll6 = parallel([coll1, coll3, coll4, coll5])
+    coll6 = parallel([coll1, coll3, coll4, coll5])
 
-coll7 = serial([Task(1, "T12"), Task(3, "T13")])
+    coll7 = serial([Task(1, "T12"), Task(3, "T13")])
 
-coll8 = parallel([coll7, Task(2, "T14")])
+    coll8 = parallel([coll7, Task(2, "T14")])
 
-project = serial([coll6, coll8, Task(1, "T15")], deadline=10)
+    project = serial([coll6, coll8, Task(1, "T15")], deadline=10)
 
-project.task("T2").progress = 0.5
-project.plan()
+    project.task("T2").progress = 0.5
+    project.plan()
 
-plotter = MplPlotter()
-plotter.plot(project)
-plotter.show()
+    plotter = MplPlotter()
+    plotter.plot(project)
+    plotter.show()
+
+
+if __name__ == '__main__':
+    main()
