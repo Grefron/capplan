@@ -177,8 +177,17 @@ serial = functools.partial(task_collection, coll_type='serial')
 parallel = functools.partial(task_collection, coll_type='parallel')
 
 
-def main():
+def milestone(duration, title=None, resources=None):
+    t = Task(duration, title, resources)
+    t.coll_type = 'milestone'
+    return t
 
+
+def project(task_collection, deadline, title, slack=0):
+    return serial([task_collection, milestone(slack, "Slack")], title=title, deadline=deadline)
+
+
+def main():
     coll1 = serial([Task(1, "T1", resources=["piet", "klaas"]), Task(1, "T2"), Task(2, "T3")])
 
     coll2 = parallel([Task(1, "T4"), Task(2, "T5")])
@@ -195,13 +204,14 @@ def main():
 
     coll8 = parallel([coll7, Task(2, "T14")])
 
-    project = serial([coll6, coll8, Task(1, "T15")], deadline=10)
+    collection = serial([coll6, coll8])
+    p = project(collection, 11, "Ship development", slack=2)
 
-    project.task("T2").progress = 0.5
-    project.plan()
+    p.task("T2").progress = 0.5
+    p.plan()
 
     plotter = MplPlotter()
-    plotter.plot(project)
+    plotter.plot(p)
     plotter.show()
 
 

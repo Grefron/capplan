@@ -4,7 +4,11 @@ from matplotlib import pyplot as plt, patches as mpatches
 class PlotterBase:
     def plot(self, coll, x1=0, y1=0, x2=100, y2=100, task_list_progress=True, scaled=False):
         # TODO: Fix scaled version (must have a  reference time)
-        self.rect(x1=x1, y1=y1, x2=x2, y2=y2, fill=False, zorder=2)
+        if coll.coll_type == 'milestone':
+            c, f, z = 'red', True, 1
+        else:
+            c, f, z = 'k', False, 2
+        self.rect(x1=x1, y1=y1, x2=x2, y2=y2, fill=f, zorder=z, color=c)
 
         padding = 1
         if task_list_progress:
