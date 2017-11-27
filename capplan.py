@@ -1,18 +1,14 @@
 import collections
 import functools
 
-# TODO: Add TaskCollection.append / TaskCollection.prepend / TaskCollection.parallel
 from plotters.plotter import MplPlotter
-
-
-# import matplotlib.pyplot as plt
 
 
 class PlannerError(Exception):
     pass
 
 
-class PlanItemMixin:
+class ActivityMixin:
     @property
     def start(self):
         # latest start date for this task, no slack in this task allows
@@ -21,21 +17,45 @@ class PlanItemMixin:
         return self.end - self.duration
 
 
-class Task(PlanItemMixin):
+class Task(ActivityMixin):
     coll_type = 'task'
-    def __init__(self, duration, title=None, resources=None):
+
+    def __init__(self, duration, title=None, resources=None, progress=0):
         if resources is None:
             resources = []
         self.title = title
-        self.estimated_duration = duration
+        self.duration = duration
         self.resources = resources
         self.end = None  # absolute latest end date, no slack in this or later tasks allowed
-        self.progress = 0.0
-        self.on_critical_path = False
+        self.progress = progress
+        self.next_task = None
+
+    def serialize(self):
+        ser = {'title': self.title,
+               'duration': self.duration,
+               'resources': self.resources,
+               'end': self.end,
+               'progress': self.progress}
+        if self.next_task is not None:
+            ser['next_task'] = self.next_task
+        if self.start is not None:
+            ser['start'] = self.start
+        return ser
+
+    @staticmethod
+    def deserialize(data):
+        t = Task(duration=data['duration'], title=data['title'], resources=data['resources'], progress=data['progress'])
+        t.end = data['end']
+        t.next_task = data.get('next_task', None)
+        return t
 
     @property
     def duration(self):
-        return self.estimated_duration * (1.0 - self.progress)
+        return self._duration * (1.0 - self.progress)
+
+    @duration.setter
+    def duration(self, value):
+        self._duration = value
 
     def __repr__(self):
         return "<Task " + str(self) + ">"
@@ -59,17 +79,31 @@ class Task(PlanItemMixin):
     def plan(self, end, next_task=None):
         # plan deadline for this task and return deadline for previous task
         self.end = end
-        self.on_critical_path = False
         self.next_task = next_task
         return self.start, self
 
 
-class AbstractTaskCollection(collections.UserList, PlanItemMixin):
+class AbstractTaskCollection(collections.UserList, ActivityMixin):
+    coll_type = 'abstract'
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.title = None
         self.end = None
         self.deadline = None
+
+    def serialize(self):
+        ser = {'activities': [t.serialize() for t in self.data],
+               'title': self.title,
+               'end': self.end,
+               'deadline': self.deadline,
+               'duration': self.duration,
+               'coll_type': self.coll_type}
+        return ser
+
+    @staticmethod
+    def deserialize(data):
+        pass
 
     @property
     def progress(self):
@@ -122,6 +156,7 @@ class AbstractTaskCollection(collections.UserList, PlanItemMixin):
 
 class SerialTaskCollection(AbstractTaskCollection):
     coll_type = 'serial'
+
     def __repr__(self):
         return "SerialTaskList <" + str(self) + ">"
 
@@ -145,6 +180,7 @@ class SerialTaskCollection(AbstractTaskCollection):
 
 class ParallelTaskCollection(AbstractTaskCollection):
     coll_type = 'parallel'
+
     def __repr__(self):
         return "ParallelTaskList <" + str(self) + ">"
 
@@ -183,31 +219,36 @@ def milestone(duration, title=None, resources=None):
     return t
 
 
-def project(task_collection, deadline, title, slack=0):
+def create_project(task_collection, deadline, title, slack=0):
     return serial([task_collection, milestone(slack, "Slack")], title=title, deadline=deadline)
 
 
-def main():
+def copy_project(blueprint, data):
+    return blueprint
+
+
+def example_project():
     coll1 = serial([Task(1, "T1", resources=["piet", "klaas"]), Task(1, "T2"), Task(2, "T3")])
-
     coll2 = parallel([Task(1, "T4"), Task(2, "T5")])
-
     coll3 = serial([coll2, Task(1, "T6")])
-
     coll4 = serial([Task(1, "T7"), Task(1, "T8"), Task(3, "T9")])
-
     coll5 = parallel([Task(2, "T10"), Task(3, "T11")])
-
     coll6 = parallel([coll1, coll3, coll4, coll5])
-
     coll7 = serial([Task(1, "T12"), Task(3, "T13")])
-
     coll8 = parallel([coll7, Task(2, "T14")])
-
     collection = serial([coll6, coll8])
-    p = project(collection, 11, "Ship development", slack=2)
+    p = create_project(collection, 11, "Ship development", slack=2)
+    return p
 
+
+def main():
+    p = example_project()
     p.task("T2").progress = 0.5
+
+    s = p.serialize()
+    print(s)
+    # print(Task.deserialize(s))
+
     p.plan()
 
     plotter = MplPlotter()
