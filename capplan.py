@@ -1,7 +1,4 @@
 import collections
-import functools
-
-from plotters.plotter import MplPlotter
 
 
 class PlannerError(Exception):
@@ -18,7 +15,7 @@ class ActivityMixin:
 
 
 class Task(ActivityMixin):
-    coll_type = 'task'
+    activity_type = 'task'
 
     def __init__(self, duration, title=None, resources=None, progress=0):
         if resources is None:
@@ -29,25 +26,6 @@ class Task(ActivityMixin):
         self.end = None  # absolute latest end date, no slack in this or later tasks allowed
         self.progress = progress
         self.next_task = None
-
-    def serialize(self):
-        ser = {'title': self.title,
-               'duration': self.duration,
-               'resources': self.resources,
-               'end': self.end,
-               'progress': self.progress}
-        if self.next_task is not None:
-            ser['next_task'] = self.next_task
-        if self.start is not None:
-            ser['start'] = self.start
-        return ser
-
-    @staticmethod
-    def deserialize(data):
-        t = Task(duration=data['duration'], title=data['title'], resources=data['resources'], progress=data['progress'])
-        t.end = data['end']
-        t.next_task = data.get('next_task', None)
-        return t
 
     @property
     def duration(self):
@@ -83,27 +61,21 @@ class Task(ActivityMixin):
         return self.start, self
 
 
-class AbstractTaskCollection(collections.UserList, ActivityMixin):
-    coll_type = 'abstract'
+class Milestone(Task):
+    activity_type = 'milestone'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.title = None
-        self.end = None
-        self.deadline = None
 
-    def serialize(self):
-        ser = {'activities': [t.serialize() for t in self.data],
-               'title': self.title,
-               'end': self.end,
-               'deadline': self.deadline,
-               'duration': self.duration,
-               'coll_type': self.coll_type}
-        return ser
+class TaskCollection(collections.UserList, ActivityMixin):
+    activity_type = 'abstract'
 
-    @staticmethod
-    def deserialize(data):
-        pass
+    def __init__(self, initlist=None, title=None, end=None, deadline=None):
+        super().__init__(initlist)
+        self.title = title
+        self.end = end
+        self.deadline = deadline
+
+    def __repr__(self):
+        return self.__class__.__name__ + "<" + str(self) + ">"
 
     @property
     def progress(self):
@@ -154,11 +126,8 @@ class AbstractTaskCollection(collections.UserList, ActivityMixin):
         raise NotImplementedError()
 
 
-class SerialTaskCollection(AbstractTaskCollection):
-    coll_type = 'serial'
-
-    def __repr__(self):
-        return "SerialTaskList <" + str(self) + ">"
+class Serial(TaskCollection):
+    activity_type = 'serial'
 
     def __str__(self):
         if self.title is not None:
@@ -178,11 +147,8 @@ class SerialTaskCollection(AbstractTaskCollection):
         return sum([d.duration for d in self.data])
 
 
-class ParallelTaskCollection(AbstractTaskCollection):
-    coll_type = 'parallel'
-
-    def __repr__(self):
-        return "ParallelTaskList <" + str(self) + ">"
+class Parallel(TaskCollection):
+    activity_type = 'parallel'
 
     def __str__(self):
         if self.title is not None:
@@ -202,42 +168,72 @@ class ParallelTaskCollection(AbstractTaskCollection):
         return max([d.duration for d in self.data])
 
 
-def task_collection(plan_items, title=None, deadline=None, coll_type='serial'):
-    coll = {'serial': SerialTaskCollection, 'parallel': ParallelTaskCollection}[coll_type](plan_items)
-    coll.deadline = deadline
-    coll.title = title
-    return coll
+class Project(Serial):
+    activity_type = 'project'
+
+    def __init__(self, collection, deadline, title, slack=0):
+        super().__init__(initlist=[collection, Milestone(slack, "Milestone")], deadline=deadline, title=title)
 
 
-serial = functools.partial(task_collection, coll_type='serial')
-parallel = functools.partial(task_collection, coll_type='parallel')
+def serialize(activity):
+    def serialize_task(task):
+        ser = {'title': task.title,
+               'duration': task.duration,
+               'resources': task.resources,
+               'end': task.end,
+               'progress': task.progress}
+        if task.next_task is not None:
+            ser['next_task'] = task.next_task
+        if task.start is not None:
+            ser['start'] = task.start
+        return ser
+
+    def serialize_collection(collection):
+        ser = {'activities': [serialize(t) for t in collection.data],
+               'title': collection.title,
+               'end': collection.end,
+               'deadline': collection.deadline,
+               'duration': collection.duration,
+               'activity_type': collection.activity_type}
+        return ser
+
+    if isinstance(activity, TaskCollection):  # in ['serial', 'parallel', 'project']:
+        return serialize_collection(activity)
+    elif isinstance(activity, Task):  # in ['task', 'milestone']:
+        return serialize_task(activity)
 
 
-def milestone(duration, title=None, resources=None):
-    t = Task(duration, title, resources)
-    t.coll_type = 'milestone'
-    return t
+def deserialize(data):
+    coll_types = {'serial': Serial, 'parallel': Parallel, 'project': Project}
+    task_types = {'task': Task, 'milestone': Milestone}
 
+    def deserialize_task(data):
+        t = Task(duration=data['duration'], title=data['title'], resources=data['resources'], progress=data['progress'])
+        t.end = data['end']
+        t.next_task = data.get('next_task', None)
+        return t
 
-def create_project(task_collection, deadline, title, slack=0):
-    return serial([task_collection, milestone(slack, "Slack")], title=title, deadline=deadline)
-
-
-def copy_project(blueprint, data):
-    return blueprint
+    def deserialize_collection(data):
+        coll_types = {'serial': Serial, 'parallel': Parallel}
+        activity = coll_types[data['activity_type']]
+        activity.data = [deserialize_task(d) for d in data['activities']]
+        activity.title = data['title']
+        activity.end = data['end']
+        activity.deadline = data['deadline']
+        return activity
 
 
 def example_project():
-    coll1 = serial([Task(1, "T1", resources=["piet", "klaas"]), Task(1, "T2"), Task(2, "T3")])
-    coll2 = parallel([Task(1, "T4"), Task(2, "T5")])
-    coll3 = serial([coll2, Task(1, "T6")])
-    coll4 = serial([Task(1, "T7"), Task(1, "T8"), Task(3, "T9")])
-    coll5 = parallel([Task(2, "T10"), Task(3, "T11")])
-    coll6 = parallel([coll1, coll3, coll4, coll5])
-    coll7 = serial([Task(1, "T12"), Task(3, "T13")])
-    coll8 = parallel([coll7, Task(2, "T14")])
-    collection = serial([coll6, coll8])
-    p = create_project(collection, 11, "Ship development", slack=2)
+    coll1 = Serial([Task(1, "T1", resources=["piet", "klaas"]), Task(1, "T2"), Task(2, "T3")])
+    coll2 = Parallel([Task(1, "T4"), Task(2, "T5")])
+    coll3 = Serial([coll2, Task(1, "T6")])
+    coll4 = Serial([Task(1, "T7"), Task(1, "T8"), Task(3, "T9")])
+    coll5 = Parallel([Task(2, "T10"), Task(3, "T11")])
+    coll6 = Parallel([coll1, coll3, coll4, coll5])
+    coll7 = Serial([Task(1, "T12"), Task(3, "T13")])
+    coll8 = Parallel([coll7, Task(2, "T14")])
+    collection = Serial([coll6, coll8])
+    p = Project(collection, 11, "Ship development", slack=2)
     return p
 
 
@@ -245,15 +241,15 @@ def main():
     p = example_project()
     p.task("T2").progress = 0.5
 
-    s = p.serialize()
+    s = serialize(p)
     print(s)
     # print(Task.deserialize(s))
 
     p.plan()
 
-    plotter = MplPlotter()
-    plotter.plot(p)
-    plotter.show()
+    # plotter = MplPlotter()
+    # plotter.plot(p)
+    # plotter.show()
 
 
 if __name__ == '__main__':
