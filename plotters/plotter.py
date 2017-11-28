@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt, patches as mpatches
 class PlotterBase:
     def plot(self, coll, x1=0, y1=0, x2=100, y2=100, task_list_progress=True, scaled=False):
         # TODO: Fix scaled version (must have a  reference time)
-        if coll.coll_type == 'milestone':
+        if coll.activity_type == 'milestone':
             c, f, z = 'red', True, 1
         else:
             c, f, z = 'k', False, 2
@@ -16,7 +16,7 @@ class PlotterBase:
         else:
             p = 0
 
-        if coll.coll_type == 'serial':
+        if coll.activity_type in ['serial', 'project']:
             ddx = (x2 - x1) / len(coll)
             dx1 = 0
             for i, d in enumerate(coll):
@@ -24,7 +24,7 @@ class PlotterBase:
                     ddx += (x2 - x1) * d.duration / coll.duration
                 self.plot(d, x1=x1 + dx1, y1=y1 + p, x2=x1 + dx1 + ddx, y2=y2)
                 dx1 += ddx
-        elif coll.coll_type == 'parallel':
+        elif coll.activity_type == 'parallel':
             dy = (y2 - y1 - p) / len(coll)
             for i, d in enumerate(coll):
                 self.plot(d, x1=x1, y1=y1 + i * dy + p, x2=x2, y2=y1 + (i + 1) * dy + p)
@@ -46,7 +46,7 @@ class PlotterBase:
                 self.text(x=(x2 + x1) / 2, y=(y2 + y1) / 2 + 2 * padding,
                           caption=str(coll.next_task), color='k', fontsize=9, zorder=10, ha='center')
 
-        if task_list_progress and coll.coll_type is not 'task':
+        if task_list_progress and coll.activity_type is not 'task':
             y2 = y1 + p
             self.rect(x1=x1, y1=y1, x2=x1 + (coll.progress * (x2 - x1)), y2=y2,
                       color='grey', zorder=1, fill=True)

@@ -137,7 +137,7 @@ class Serial(TaskCollection):
 
     def plan(self, end=None, next_task=None):
         end = super().plan_end(end)
-        for d in reversed(self.data):
+        for d in reversed(self):
             # all plan items must have an end date equal to start date of next task (backwards planning)
             end, next_task = d.plan(end, next_task=next_task)
         return self.start, next_task
@@ -158,7 +158,7 @@ class Parallel(TaskCollection):
 
     def plan(self, end=None, next_task=None):
         end = super().plan_end(end)
-        for d in reversed(self.data):
+        for d in reversed(self):
             # all plan items must have same end date as task list (executed in parallel)
             _, t = d.plan(end, next_task=next_task)
         return self.start, t
@@ -171,9 +171,9 @@ class Parallel(TaskCollection):
 class Project(Serial):
     activity_type = 'project'
 
-    def __init__(self, collection, deadline, title, slack=0):
-        super().__init__(initlist=[collection, Milestone(slack, "Milestone")], deadline=deadline, title=title)
-
+    def __init__(self, initlist=None, deadline=None, title=None, slack=0):
+        super().__init__(initlist=initlist, deadline=deadline, title=title)
+        self.data.append(Milestone(slack, "Milestone"))
 
 def serialize(activity):
     def serialize_task(task):
@@ -181,7 +181,8 @@ def serialize(activity):
                'duration': task.duration,
                'resources': task.resources,
                'end': task.end,
-               'progress': task.progress}
+               'progress': task.progress,
+               'activity_type': task.activity_type}
         if task.next_task is not None:
             ser['next_task'] = task.next_task
         if task.start is not None:
@@ -204,23 +205,37 @@ def serialize(activity):
 
 
 def deserialize(data):
-    coll_types = {'serial': Serial, 'parallel': Parallel, 'project': Project}
-    task_types = {'task': Task, 'milestone': Milestone}
-
-    def deserialize_task(data):
-        t = Task(duration=data['duration'], title=data['title'], resources=data['resources'], progress=data['progress'])
+    def deserialize_task(data, cls):
+        t = cls(duration=data['duration'], title=data['title'], resources=data['resources'], progress=data['progress'])
         t.end = data['end']
         t.next_task = data.get('next_task', None)
         return t
 
-    def deserialize_collection(data):
-        coll_types = {'serial': Serial, 'parallel': Parallel}
-        activity = coll_types[data['activity_type']]
-        activity.data = [deserialize_task(d) for d in data['activities']]
-        activity.title = data['title']
-        activity.end = data['end']
-        activity.deadline = data['deadline']
-        return activity
+    def deserialize_collection(data, cls):
+        return cls([deserialize(d) for d in data['activities']], title=data['title'], end=data['end'],
+                   deadline=data['deadline'])
+
+    def deserialize_project(data, cls):
+        return cls(initlist=[deserialize(d) for d in data['activities']], title=data['title'],
+                   deadline=data['deadline'])
+
+    coll_types = {'serial': Serial, 'parallel': Parallel}
+    project_types = {'project': Project}
+    task_types = {'task': Task, 'milestone': Milestone}
+
+    # will go wrong with Project class due to being treated as a normal collection while serializing
+
+    at = data['activity_type']
+    print(data['activity_type'])
+
+    if at in coll_types.keys():
+        return deserialize_collection(data, coll_types[at])
+    elif at in task_types.keys():
+        return deserialize_task(data, task_types[at])
+    elif at in project_types.keys():
+        return deserialize_project(data, project_types[at])
+    else:
+        raise KeyError('cannot find deserializer')
 
 
 def example_project():
@@ -238,18 +253,21 @@ def example_project():
 
 
 def main():
+    from plotters.plotter import MplPlotter
     p = example_project()
     p.task("T2").progress = 0.5
 
     s = serialize(p)
     print(s)
+    p2 = deserialize(s)
     # print(Task.deserialize(s))
+    print(str(p2))
 
-    p.plan()
-
-    # plotter = MplPlotter()
-    # plotter.plot(p)
-    # plotter.show()
+    # p.plan()
+    p2.plan()
+    plotter = MplPlotter()
+    plotter.plot(p2)
+    plotter.show()
 
 
 if __name__ == '__main__':
