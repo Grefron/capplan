@@ -2,61 +2,79 @@ from matplotlib import pyplot as plt, patches as mpatches
 
 
 class PlotterBase:
-    def plot(self, coll, x1=0, y1=0, x2=100, y2=100, task_list_progress=True, scaled=False):
+    def plot(self, coll, x1=0, y1=0, x2=100, y2=None, progressbar=True, scaled=True, padding=None):
+        if y2 is None:
+            y2 = x2 - x1
+        if padding is None:
+            padding = (0.01 * (x2 - x1), 0.03 * (y2 - y1))
+        h_padding, v_padding = padding
+
         # TODO: Fix scaled version (must have a  reference time)
         if coll.activity_type == 'milestone':
-            c, f, z = 'red', True, 1
+            self.rect(x1=x1, y1=y1, x2=x2, y2=y2, fill=True, zorder=1, color='red')
         else:
-            c, f, z = 'k', False, 2
-        self.rect(x1=x1, y1=y1, x2=x2, y2=y2, fill=f, zorder=z, color=c)
+            self.rect(x1=x1, y1=y1, x2=x2, y2=y2, fill=False, zorder=2, color='k')
 
-        padding = 1
-        if task_list_progress:
-            p = 2 * padding
-        else:
-            p = 0
+        p = v_padding if progressbar else 0
 
         if coll.activity_type in ['serial', 'project']:
-            ddx = (x2 - x1) / len(coll)
-            dx1 = 0
-            for i, d in enumerate(coll):
-                if scaled:
-                    ddx += (x2 - x1) * d.duration / coll.duration
-                self.plot(d, x1=x1 + dx1, y1=y1 + p, x2=x1 + dx1 + ddx, y2=y2)
-                dx1 += ddx
+            if scaled:
+                for d in coll:
+                    self.plot(d, x1=d.start, y1=y1 + p, x2=d.end, y2=y2, scaled=scaled, padding=padding)
+            else:
+                offset = 0
+                width = (x2 - x1) / len(coll)
+                for i, d in enumerate(coll):
+                    self.plot(d, x1=x1 + offset, y1=y1 + p, x2=x1 + offset + width, y2=y2, scaled=scaled,
+                              padding=padding)
+                    offset += width
         elif coll.activity_type == 'parallel':
             dy = (y2 - y1 - p) / len(coll)
-            for i, d in enumerate(coll):
-                self.plot(d, x1=x1, y1=y1 + i * dy + p, x2=x2, y2=y1 + (i + 1) * dy + p)
+            if scaled:
+                for i, d in enumerate(coll):
+                    self.plot(d, x1=d.start, y1=y1 + i * dy + p, x2=x2, y2=y1 + (i + 1) * dy + p, scaled=scaled,
+                              padding=padding)
+            else:
+                for i, d in enumerate(coll):
+                    self.plot(d, x1=x1, y1=y1 + i * dy + p, x2=x2, y2=y1 + (i + 1) * dy + p, scaled=scaled,
+                              padding=padding)
         else:  # assume task
-            self.rect(x1=x1, y1=y1, x2=x1 + (coll.progress * (x2 - x1)), y2=y2,
-                      color='lightgrey', zorder=1, fill=True)
-            self.text(x=(x1 + x2) / 2, y=(y1 + y2) / 2,
-                      caption=str(coll) + "(" + str(coll.duration) + ")", color='k', fontsize=10, zorder=10,
-                      ha='center')
-            self.text(x=(x1 + x2) / 2, y=y1 + padding,
-                      caption=", ".join(coll.resources), color='k', fontsize=8, zorder=10, ha='center')
-            self.text(x=(x1 + x2) / 2, y=y2 - 2 * padding,
-                      caption="@" + str(coll.progress * 100) + "%", fontsize=9, zorder=10, ha='center')
-            if coll.end is not None:
-                self.text(x=x1 + padding, y=(y1 + y2) / 2,
-                          caption=str(coll.start), color='r', fontsize=9, zorder=10, ha='left')
-                self.text(x=x2 - padding, y=(y1 + y2) / 2,
-                          caption=str(coll.end), color='b', fontsize=9, zorder=10, horizontalalignment='right')
-                self.text(x=(x2 + x1) / 2, y=(y2 + y1) / 2 + 2 * padding,
-                          caption=str(coll.next_task), color='k', fontsize=9, zorder=10, ha='center')
+            self.draw_task(coll, x1, y1, x2, y2, padding)
 
-        if task_list_progress and coll.activity_type is not 'task':
-            y2 = y1 + p
-            self.rect(x1=x1, y1=y1, x2=x1 + (coll.progress * (x2 - x1)), y2=y2,
-                      color='grey', zorder=1, fill=True)
-            self.text(x=(x1 + x2) / 2, y=y1 + p / 5,
-                      caption=str(coll.duration), color='k', fontsize=9, zorder=10, ha='center')
-            self.text(x=x1 + padding, y=y1 + p / 5,
+        if progressbar and coll.activity_type is not 'task':
+            self.draw_progressbar(coll, x1, y1, x2, padding)
+
+    def draw_progressbar(self, coll, x1, y1, x2, padding):
+        h_padding, v_padding = padding
+        y2 = y1 + v_padding
+        self.rect(x1=x1, y1=y1, x2=x2, y2=y2, color='k', fill=False)
+        self.rect(x1=x1, y1=y1, x2=x1 + (coll.progress * (x2 - x1)), y2=y2,
+                  color='grey', zorder=1, fill=True)
+        self.text(x=(x1 + x2) / 2, y=y1 + v_padding / 5,
+                  caption=str(coll.duration), color='k', fontsize=9, zorder=10, ha='center')
+        self.text(x=x1 + h_padding, y=y1 + v_padding / 5,
+                  caption=str(coll.start), color='r', fontsize=9, zorder=10, ha='left')
+        # task collection end
+        self.text(x=x2 - h_padding, y=y1 + v_padding / 5, caption=str(coll.end),
+                  color='b', fontsize=9, zorder=10, horizontalalignment='right')
+
+    def draw_task(self, coll, x1, y1, x2, y2, padding):
+        h_padding, v_padding = padding
+        self.rect(x1=x1, y1=y1, x2=x2, y2=y2, color='lightblue', zorder=0, fill=True)
+        self.rect(x1=x1, y1=y1, x2=x1 + (coll.progress * (x2 - x1)), y2=y2,
+                  color='blue', zorder=1, fill=True)
+        self.text(x=(x1 + x2) / 2, y=(y1 + y2) / 2,
+                  caption=str(coll) + "(" + str(coll.duration) + ")", color='k', fontsize=10, zorder=10,
+                  ha='center')
+        self.text(x=(x1 + x2) / 2, y=y1 + h_padding,
+                  caption=", ".join(coll.resources), color='k', fontsize=8, zorder=10, ha='center')
+        self.text(x=(x1 + x2) / 2, y=y2 - 2 * h_padding,
+                  caption="@" + str(coll.progress * 100) + "%", fontsize=9, zorder=10, ha='center')
+        if coll.end is not None:
+            self.text(x=x1 + h_padding, y=(y1 + y2) / 2,
                       caption=str(coll.start), color='r', fontsize=9, zorder=10, ha='left')
-            # task collection end
-            self.text(x=x2 - padding, y=y1 + p / 5, caption=str(coll.end),
-                      color='b', fontsize=9, zorder=10, horizontalalignment='right')
+            self.text(x=x2 - h_padding, y=(y1 + y2) / 2,
+                      caption=str(coll.end), color='b', fontsize=9, zorder=10, horizontalalignment='right')
 
 
 class MplPlotter(PlotterBase):
@@ -88,6 +106,11 @@ class MplPlotter(PlotterBase):
         zorder = data.get('zorder', 10)
         self.ax.text(x, y, caption, color=color, fontsize=fontsize,
                      zorder=zorder, horizontalalignment=horizontalalignment)
+
+    def plot_project(self, project):
+        self.plot(project, x1=0, x2=project.duration, scaled=True)
+        self.ax.autoscale()
+        self.figure.tight_layout()
 
     def show(self):
         # self.figure.show()

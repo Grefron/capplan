@@ -266,7 +266,7 @@ def main():
     # p.plan()
     p2.plan()
     plotter = MplPlotter()
-    plotter.plot(p2)
+    plotter.plot_project(p2)
     plotter.show()
 
 
