@@ -224,8 +224,6 @@ def deserialize(data):
     project_types = {'project': Project}
     task_types = {'task': Task, 'milestone': Milestone}
 
-    # will go wrong with Project class due to being treated as a normal collection while serializing
-
     at = data['activity_type']
     print(data['activity_type'])
 
