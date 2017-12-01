@@ -17,12 +17,15 @@ def example_project():
 
 def main():
     from plotters.plotter import MplPlotter
+    import json
     p1 = example_project()
     p1.task("T2").progress = 0.5
 
     p2 = deserialize(serialize(p1))
 
     p2.plan()
+
+    print(json.dumps(serialize(p2)))
     plotter = MplPlotter()
     plotter.plot_project(p2)
     plotter.show()

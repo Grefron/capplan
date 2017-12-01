@@ -185,7 +185,7 @@ def serialize(activity):
                'progress': task.progress,
                'activity_type': task.activity_type}
         if task.next_task is not None:
-            ser['next_task'] = task.next_task
+            ser['next_task'] = str(task.next_task)
         if task.start is not None:
             ser['start'] = task.start
         return ser
