@@ -216,8 +216,8 @@ def deserialize(data):
                    deadline=data['deadline'])
 
     def deserialize_project(data, cls):
-        return cls(initlist=[deserialize(d) for d in data['activities']], title=data['title'],
-                   deadline=data['deadline'])
+        return cls(initlist=[deserialize(d) for d in data['activities'][0:-1]], title=data['title'],
+                   deadline=data['deadline'], slack=data['activities'][-1]['duration'])
 
     coll_types = {'serial': Serial, 'parallel': Parallel}
     project_types = {'project': Project}
