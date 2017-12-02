@@ -1,4 +1,4 @@
-from capplan import Serial, Task, Parallel, Project, deserialize, serialize
+from capplan import Serial, Task, Parallel, Project, deserialize, serialize, todo_list
 
 
 def example_project():
@@ -42,8 +42,10 @@ def main():
     plotter = MplPlotter()
     plotter.plot_project(p2)
     plotter.plot_project(p1)
-    # plotter.plot_projects(pl)
     plotter.show()
+
+    tl = todo_list([p1, p2])
+    serialize(tl)
 
 
 if __name__ == '__main__':

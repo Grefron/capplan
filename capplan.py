@@ -44,7 +44,7 @@ class Task(ActivityMixin):
         else:
             return "<Task - " + self.duration + ">"
 
-    def tasks(self, resources=None, sort=True):
+    def tasks(self, resources=None):
         if isinstance(resources, str):
             resources = [resources]
         if resources is None or len(self.resources) == 0:
@@ -84,34 +84,26 @@ class TaskCollection(collections.UserList, ActivityMixin):
     def progress(self):
         if self.end is None:
             return 0
-        tasks = self.tasks(sort=False)
+        tasks = self.tasks()
         return sum([t.progress * t.duration for t in tasks]) / sum([t.duration for t in tasks])
 
     def task(self, title):
-        for t in self.tasks(sort=False):
+        for t in self.tasks():
             if t.title == title:
                 return t
         return None
 
-    def tasks(self, resources=None, sort=True):
+    def tasks(self, resources=None):
         tasks = []
         for d in self:
-            tasks += d.tasks(resources, sort)
-        tasks = list(set(tasks))
-        if sort:
-            # sorted(student_tuples, key=lambda student: student[2])
-            return sorted(tasks, key=lambda t: t.start)
-        else:
-            return tasks
+            tasks += d.tasks(resources)
+        return list(set(tasks))
 
     def collections(self):
         collections = [self]
         for d in self:
             collections += d.collections()
         return collections
-
-    def critical_path(self):
-        pass
 
     def plan(self):
         raise NotImplementedError()
@@ -217,11 +209,12 @@ def serialize(activity):
                'activities': [serialize(t) for t in collection.data]}
         return ser
 
-    if isinstance(activity, TaskCollection):  # in ['serial', 'parallel', 'project']:
+    if isinstance(activity, TaskCollection):
         return serialize_collection(activity)
-    elif isinstance(activity, Task):  # in ['task', 'milestone']:
+    elif isinstance(activity, Task):
         return serialize_task(activity)
-
+    elif isinstance(activity, dict):  # assume list of tasks
+        return [serialize_task(a) for a in activity]
 
 def deserialize(data):
     def deserialize_task(data, cls):
@@ -238,6 +231,9 @@ def deserialize(data):
         return cls(initlist=[deserialize(d) for d in data['activities'][0:-1]], title=data['title'],
                    deadline=data['deadline'], slack=data['activities'][-1]['duration'])
 
+    if isinstance(data, list):  # assume list of tasks
+        return [deserialize_task(d) for d in data]
+
     coll_types = {'serial': Serial, 'parallel': Parallel}
     project_types = {'project': Project}
     task_types = {'task': Task, 'milestone': Milestone}
@@ -252,3 +248,12 @@ def deserialize(data):
         return deserialize_project(data, project_types[at])
     else:
         raise KeyError('cannot find deserializer')
+
+
+def todo_list(projects, resources=None, sort=True):
+    tasks = []
+    for p in projects:
+        tasks += [t for t in p.tasks(resources=resources) if t.progress < 1 and t.activity_type != 'milestone']
+    if sort:
+        return sorted(tasks, key=lambda t: t.start)
+    return tasks
