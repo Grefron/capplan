@@ -2,6 +2,15 @@ from matplotlib import pyplot as plt, patches as mpatches
 
 
 class PlotterBase:
+    def __init__(self):
+        self.ranges = []
+
+    def clear(self):
+        self.ranges = []
+
+    def plot_project(self, project):
+        pass
+
     def plot(self, coll, x1=0, y1=0, x2=100, y2=None, progressbar=True, scaled=True, padding=None):
         if y2 is None:
             y2 = x2 - x1
@@ -79,6 +88,7 @@ class PlotterBase:
 
 class MplPlotter(PlotterBase):
     def __init__(self, width=10, height=8):
+        super().__init__()
         self.figure = plt.figure(figsize=(width, height))
         self.ax = self.figure.add_subplot(111)
         self.figure.tight_layout()
@@ -86,7 +96,14 @@ class MplPlotter(PlotterBase):
         self.ax.axis(xmin=0, xmax=100, ymin=0, ymax=100)
 
     def clear(self):
+        super().__init__()
         self.ax.clear()
+
+    def plot_project(self, project):
+        super().__init__()
+        self.plot(project, x1=project.start, x2=project.end, scaled=True)
+        self.ax.autoscale()
+        self.figure.tight_layout()
 
     def rect(self, **data):
         x1, y1, x2, y2 = data['x1'], data['y1'], data['x2'], data['y2']
@@ -106,11 +123,6 @@ class MplPlotter(PlotterBase):
         zorder = data.get('zorder', 10)
         self.ax.text(x, y, caption, color=color, fontsize=fontsize,
                      zorder=zorder, horizontalalignment=horizontalalignment)
-
-    def plot_project(self, project):
-        self.plot(project, x1=0, x2=project.duration, scaled=True)
-        self.ax.autoscale()
-        self.figure.tight_layout()
 
     def show(self):
         # self.figure.show()

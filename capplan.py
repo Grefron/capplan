@@ -54,6 +54,9 @@ class Task(ActivityMixin):
         else:
             return []
 
+    def collections(self):
+        return []
+
     def plan(self, end, next_task=None):
         # plan deadline for this task and return deadline for previous task
         self.end = end
@@ -92,7 +95,7 @@ class TaskCollection(collections.UserList, ActivityMixin):
 
     def tasks(self, resources=None, sort=True):
         tasks = []
-        for d in self.data:
+        for d in self:
             tasks += d.tasks(resources, sort)
         tasks = list(set(tasks))
         if sort:
@@ -100,6 +103,12 @@ class TaskCollection(collections.UserList, ActivityMixin):
             return sorted(tasks, key=lambda t: t.start)
         else:
             return tasks
+
+    def collections(self):
+        collections = [self]
+        for d in self:
+            collections += d.collections()
+        return collections
 
     def critical_path(self):
         pass
@@ -175,6 +184,15 @@ class Project(Serial):
         super().__init__(initlist=initlist, deadline=deadline, title=title)
         self.data.append(Milestone(slack, "Milestone"))
 
+    def shift_deadline(self, deadline):
+        if deadline is None or deadline == self.deadline:
+            return False
+        dt = deadline - self.deadline
+        for t in self.collections():
+            if t.deadline is not None:
+                t.deadline += dt
+        return True
+
 
 def serialize(activity):
     def serialize_task(task):
@@ -191,12 +209,12 @@ def serialize(activity):
         return ser
 
     def serialize_collection(collection):
-        ser = {'activities': [serialize(t) for t in collection.data],
-               'title': collection.title,
+        ser = {'title': collection.title,
                'end': collection.end,
                'deadline': collection.deadline,
                'duration': collection.duration,
-               'activity_type': collection.activity_type}
+               'activity_type': collection.activity_type,
+               'activities': [serialize(t) for t in collection.data]}
         return ser
 
     if isinstance(activity, TaskCollection):  # in ['serial', 'parallel', 'project']:
@@ -225,7 +243,6 @@ def deserialize(data):
     task_types = {'task': Task, 'milestone': Milestone}
 
     at = data['activity_type']
-    print(data['activity_type'])
 
     if at in coll_types.keys():
         return deserialize_collection(data, coll_types[at])
