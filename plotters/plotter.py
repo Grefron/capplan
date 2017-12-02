@@ -3,13 +3,25 @@ from matplotlib import pyplot as plt, patches as mpatches
 
 class PlotterBase:
     def __init__(self):
-        self.ranges = []
+        self.timelines = []
 
     def clear(self):
-        self.ranges = []
+        self.timelines = []
 
     def plot_project(self, project):
-        pass
+        x1, x2 = project.start, project.end
+        if len(self.timelines) == 0:
+            self.timelines.append([project])
+            return 0
+        for i, projects in enumerate(self.timelines):
+            overlap = False
+            for p in projects:
+                if p.start < project.start < p.end or p.start < project.end < p.end:
+                    overlap = True
+            if not overlap:
+                return i
+        self.timelines.append([project])
+        return len(self.timelines) - 1
 
     def plot(self, coll, x1=0, y1=0, x2=100, y2=None, progressbar=True, scaled=True, padding=None):
         if y2 is None:
@@ -18,7 +30,9 @@ class PlotterBase:
             padding = (0.01 * (x2 - x1), 0.03 * (y2 - y1))
         h_padding, v_padding = padding
 
-        # TODO: Fix scaled version (must have a  reference time)
+        if coll.activity_type == 'project':
+            self.text(x=(x1 + x2) / 2, y=y2 + v_padding / 2, caption=str(coll.title), ha='center', fontsize=10,
+                      color='k', weight='bold')
         if coll.activity_type == 'milestone':
             self.rect(x1=x1, y1=y1, x2=x2, y2=y2, fill=True, zorder=1, color='red')
         else:
@@ -92,16 +106,18 @@ class MplPlotter(PlotterBase):
         self.figure = plt.figure(figsize=(width, height))
         self.ax = self.figure.add_subplot(111)
         self.figure.tight_layout()
-
         self.ax.axis(xmin=0, xmax=100, ymin=0, ymax=100)
+        self.timeline_height = 10
 
     def clear(self):
         super().__init__()
         self.ax.clear()
 
     def plot_project(self, project):
-        super().__init__()
-        self.plot(project, x1=project.start, x2=project.end, scaled=True)
+        timeline = super().plot_project(project)
+        y1 = 1.025 * timeline * self.timeline_height
+        y2 = y1 + 0.95 * self.timeline_height
+        self.plot(project, x1=project.start, y1=y1, x2=project.end, y2=y2, scaled=True)
         self.ax.autoscale()
         self.figure.tight_layout()
 
@@ -118,11 +134,13 @@ class MplPlotter(PlotterBase):
         caption = data['caption']
         color = data.get('color', 'b')
         fontsize = data.get('fontsize', 10)
+        weight = data.get('weight', 'normal')
         horizontalalignment = data.get('horizontalalignment', 'left')
         horizontalalignment = data.get('ha', horizontalalignment)
         zorder = data.get('zorder', 10)
         self.ax.text(x, y, caption, color=color, fontsize=fontsize,
-                     zorder=zorder, horizontalalignment=horizontalalignment)
+                     zorder=zorder, horizontalalignment=horizontalalignment,
+                     weight=weight)
 
     def show(self):
         # self.figure.show()

@@ -31,7 +31,7 @@ def main():
     pl.append(p1)
     pl.append(p2)
 
-    p2.shift_deadline(30)
+    p2.shift_deadline(15)
     p2.plan()
 
     # use/store data
