@@ -26,6 +26,7 @@ class Task(ActivityMixin):
         self.end = None  # absolute latest end date, no slack in this or later tasks allowed
         self.progress = progress
         self.next_task = None
+        self.metadata = {}
 
     @property
     def duration(self):
@@ -76,6 +77,7 @@ class TaskCollection(collections.UserList, ActivityMixin):
         self.title = title
         self.end = end
         self.deadline = deadline
+        self.metadata = {}
 
     def __repr__(self):
         return self.__class__.__name__ + "<" + str(self) + ">"
@@ -126,6 +128,13 @@ class TaskCollection(collections.UserList, ActivityMixin):
     def duration(self):
         raise NotImplementedError()
 
+    @property
+    def resources(self):
+        resources = []
+        for d in self:
+            resources += d.resources
+        return list(set(resources))
+
 
 class Serial(TaskCollection):
     activity_type = 'serial'
@@ -175,6 +184,7 @@ class Project(Serial):
     def __init__(self, initlist=None, deadline=None, title=None, slack=0):
         super().__init__(initlist=initlist, deadline=deadline, title=title)
         self.data.append(Milestone(slack, "Milestone"))
+        self.finished = False
 
     def shift_deadline(self, deadline):
         if deadline is None or deadline == self.deadline:
@@ -186,68 +196,11 @@ class Project(Serial):
         return True
 
 
-def serialize(activity):
-    def serialize_task(task):
-        ser = {'title': task.title,
-               'duration': task.duration,
-               'resources': task.resources,
-               'end': task.end,
-               'progress': task.progress,
-               'activity_type': task.activity_type}
-        if task.next_task is not None:
-            ser['next_task'] = str(task.next_task)
-        if task.start is not None:
-            ser['start'] = task.start
-        return ser
-
-    def serialize_collection(collection):
-        ser = {'title': collection.title,
-               'end': collection.end,
-               'deadline': collection.deadline,
-               'duration': collection.duration,
-               'activity_type': collection.activity_type,
-               'activities': [serialize(t) for t in collection.data]}
-        return ser
-
-    if isinstance(activity, TaskCollection):
-        return serialize_collection(activity)
-    elif isinstance(activity, Task):
-        return serialize_task(activity)
-    elif isinstance(activity, dict):  # assume list of tasks
-        return [serialize_task(a) for a in activity]
-
-def deserialize(data):
-    def deserialize_task(data, cls):
-        t = cls(duration=data['duration'], title=data['title'], resources=data['resources'], progress=data['progress'])
-        t.end = data['end']
-        t.next_task = data.get('next_task', None)
-        return t
-
-    def deserialize_collection(data, cls):
-        return cls([deserialize(d) for d in data['activities']], title=data['title'], end=data['end'],
-                   deadline=data['deadline'])
-
-    def deserialize_project(data, cls):
-        return cls(initlist=[deserialize(d) for d in data['activities'][0:-1]], title=data['title'],
-                   deadline=data['deadline'], slack=data['activities'][-1]['duration'])
-
-    if isinstance(data, list):  # assume list of tasks
-        return [deserialize_task(d) for d in data]
-
-    coll_types = {'serial': Serial, 'parallel': Parallel}
-    project_types = {'project': Project}
-    task_types = {'task': Task, 'milestone': Milestone}
-
-    at = data['activity_type']
-
-    if at in coll_types.keys():
-        return deserialize_collection(data, coll_types[at])
-    elif at in task_types.keys():
-        return deserialize_task(data, task_types[at])
-    elif at in project_types.keys():
-        return deserialize_project(data, project_types[at])
-    else:
-        raise KeyError('cannot find deserializer')
+def resource_list(projects):
+    resources = []
+    for p in projects:
+        resources += p.resources
+    return list(set(resources))
 
 
 def todo_list(projects, resources=None, sort=True):
